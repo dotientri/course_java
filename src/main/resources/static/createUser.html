@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create User</title>
+</head>
+<body>
+<h1>Create New User</h1>
+<form id="createUserForm">
+    <label>Username:</label>
+    <input type="text" id="username"><br>
+
+    <label>Password:</label>
+    <input type="password" id="password"><br>
+
+    <label>First Name:</label>
+    <input type="text" id="firstName"><br>
+
+    <label>Last Name:</label>
+    <input type="text" id="lastName"><br>
+
+    <label>Date of Birth:</label>
+    <input type="date" id="dob"><br>
+
+    <button type="button" onclick="createUser()">Create User</button>
+</form>
+
+<script>
+    function createUser() {
+        const user = {
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+            firstName: document.getElementById('firstName').value,
+            lastName: document.getElementById('lastName').value,
+            dob: document.getElementById('dob').value
+        };
+
+        fetch('/home/users', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(user)
+        })
+            .then(response => response.json())
+            .then(data => {
+                alert('User created successfully: ' + data.username);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+</script>
+</body>
+</html>
