@@ -5,7 +5,7 @@
 </head>
 <body>
 <h1>Create New User</h1>
-<form id="createUserForm">
+<form method="post" action="/home/users" id="createUserForm">
     <label>Username:</label>
     <input type="text" id="username"><br>
 
@@ -25,6 +25,12 @@
 </form>
 
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        fetch('http://localhost:8080')
+            .then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+    });
     function createUser() {
         const user = {
             username: document.getElementById('username').value,
