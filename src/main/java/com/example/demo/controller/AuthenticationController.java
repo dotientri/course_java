@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.dto.request.ApiResponse;
 import com.example.demo.dto.request.AuthenticationRequest;
 import com.example.demo.dto.request.IntrospectRequest;
+import com.example.demo.dto.request.LogoutRequest;
 import com.example.demo.dto.response.AuthenticationResponse;
 import com.example.demo.dto.response.IntrospectResponse;
 import com.example.demo.service.AuthenticationService;
@@ -10,16 +11,14 @@ import com.nimbusds.jose.JOSEException;
 import lombok.*;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.text.ParseException;
 
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "http://localhost:3001")
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class AuthenticationController {
     AuthenticationService authenticationService;
@@ -29,6 +28,7 @@ public class AuthenticationController {
         var result = authenticationService.authenticate(request);
         return ApiResponse.<AuthenticationResponse>builder().code(1000)
                 .result(result)
+                .message("Signed in successfully")
                 .build();
     }
 
@@ -37,6 +37,13 @@ public class AuthenticationController {
         var result = authenticationService.introspect(request);
         return ApiResponse.<IntrospectResponse>builder().code(1000)
                 .result(result)
+                .build();
+    }
+    @PostMapping("/logout")
+    ApiResponse<Void> logout(@RequestBody LogoutRequest request) throws ParseException, JOSEException {
+        authenticationService.logout(request);
+        return ApiResponse.<Void>builder()
+                .message("Successfully logged out")
                 .build();
     }
 }

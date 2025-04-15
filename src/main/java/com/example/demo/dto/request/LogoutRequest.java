@@ -1,17 +1,13 @@
-package com.example.demo.dto.response;
+package com.example.demo.dto.request;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-
-import java.time.LocalDate;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class AuthenticationResponse {
+public class LogoutRequest {
     String token;
-    String id;
-    boolean authenticated;
 }

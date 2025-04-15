@@ -1,5 +1,6 @@
 package com.example.demo.dto.request;
 
+import com.example.demo.validator.DobConstraint;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -14,13 +15,15 @@ import java.time.LocalDate;
 public class UserCreationRequest {
 //    @Size(min = 8, max = 20,message = "Username must be least 8 character")
 //cach de su dung
-    @Size(min = 3, max = 20,message = "USERNAME_INVALID")
+    @Size(min = 4, max = 20,message = "USERNAME_INVALID")
      String username;
-    @Size(min = 3, max = 15,message = "INVALID_PASSWORD")
+    @Size(min = 6, max = 15,message = "INVALID_PASSWORD")
      String password;
      String firstName;
      String lastName;
+     @DobConstraint(min = 10, message = "INVALID_DOB")
      LocalDate dob;
 //Đây là một lớp DTO (Data Transfer Object) được sử dụng để đóng gói dữ liệu cần thiết để tạo người dùng mới. Nó chứa các trường dữ liệu cho tên đăng nhập, mật khẩu, tên, họ và ngày sinh của người dùng, cùng với các phương thức getter và setter tương ứng.
+
 
 }

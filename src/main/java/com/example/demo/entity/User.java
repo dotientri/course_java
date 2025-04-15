@@ -1,9 +1,6 @@
 package com.example.demo.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
@@ -27,7 +24,9 @@ public class User {
     String firstName;
     String lastName;
     LocalDate dob;
-    Set<String> roles;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    Set<Role> roles;
 
 //Đây là một lớp đại diện cho thực thể User và ánh xạ với một bảng trong cơ sở dữ liệu. Các annotations như @Entity và @Id được sử dụng để định nghĩa thực thể và khóa chính của nó. @GeneratedValue(strategy = GenerationType.UUID) tạo ra một định danh duy nhất cho mỗi người dùng.
 }

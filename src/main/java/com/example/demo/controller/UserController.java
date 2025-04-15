@@ -20,11 +20,12 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/users")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "http://localhost:3001")
 // Cho phép tất cả các nguồn để tránh lỗi CORS
 //    tương tác trực típ với các lớp service
 @RequiredArgsConstructor(onConstructor_ = {@Autowired})
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+
 public class UserController {
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
     UserService userService;
@@ -56,7 +57,7 @@ public class UserController {
                 .build();
 
     }
-    @GetMapping("/myInfo")
+    @GetMapping("/info")
     ApiResponse<UserResponse> getMyInfo() {
         return ApiResponse.<UserResponse>builder()
                 .result(userService.getMyInfo())

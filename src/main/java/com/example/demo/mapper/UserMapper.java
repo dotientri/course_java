@@ -18,7 +18,9 @@ public interface UserMapper {
 //    @Mapping(source = "lastName",target = "firstName")
 //    @Mapping(target = "firstName",ignore = true)
 //    nay se khong map cai fild class name
+//    @Mapping(target = "roles",ignore = true)
     UserResponse toUserResponse(User user);
+    @Mapping(target = "roles",ignore = true)
     void updateUser(@MappingTarget User user, UserUpdateRequest request);
 //    cta se define map data userupdate request vap user
 }
