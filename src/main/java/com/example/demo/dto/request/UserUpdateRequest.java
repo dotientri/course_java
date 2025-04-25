@@ -14,14 +14,10 @@ import java.util.List;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class UserUpdateRequest {
-     @Size(min = 3, max = 15,message = "INVALID_PASSWORD")
-     String username;
      String password;
      String firstName;
      String lastName;
      @DobConstraint(min = 18, message = "INVALID_DOB")
      LocalDate dob;
      List<String> roles; // List<String>
-
-
 }

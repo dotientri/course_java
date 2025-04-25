@@ -72,9 +72,9 @@ public class UserService {
         userRepository.deleteById(userId);
     }
 
-//    @PreAuthorize("hasRole('ADMIN')")
     //PreAuthorize ís method that if it true continues else otherwise stop at condition
-    @PreAuthorize("hasAuthority('VIEW_LOGS')")
+//    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('APPROVE_POST')")
     public List<User> getUser() {
         log.info("In method getUser");
         return userRepository.findAll();

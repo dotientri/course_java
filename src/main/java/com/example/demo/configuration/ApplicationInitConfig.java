@@ -31,25 +31,25 @@ public class ApplicationInitConfig {
                 User user = User.builder()
                         .username("admin")
                         .password(passwordEncoder.encode("admin"))
-//                        .roles(roles)
+//                        .roles(Role)
                         .build();
                 userRepository.save(user);
                 log.warn("admin user has been created with default password : admin , please change it !");
             }
-            for (int i = 1; i <= 10; i++) {
-                String staffUsername = "staff" + i;
+
+                String staffUsername = "staff";
                 if (userRepository.findByUsername(staffUsername).isEmpty()) {
                     var roles = new HashSet<String>();
                     roles.add(Role.STAFF.name());
                     User user = User.builder()
                             .username(staffUsername)
-                            .password(passwordEncoder.encode("staff" + i))
+                            .password(passwordEncoder.encode("staff"))
 //                            .roles(roles)
                             .build();
                     userRepository.save(user);
-                    log.info("Staff user {} has been created with default password: staff{}", staffUsername, i);
+                    log.info("Staff user {} has been created with default password: staff{}", staffUsername);
                 }
-            }
+
         };
     }
 }
