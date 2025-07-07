@@ -1,3 +1,4 @@
+// src/main/java/com/example/demo/repository/UserRepository.java
 package com.example.demo.repository;
 
 import com.example.demo.entity.User;
@@ -10,4 +11,8 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, String> {
     boolean existsByUsername(String username);
     Optional<User> findByUsername(String username);
+
+    // Các phương thức mới
+    boolean existsByEmail(String email);
+    Optional<User> findByEmail(String email);
 }

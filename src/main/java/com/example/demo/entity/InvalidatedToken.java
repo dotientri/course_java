@@ -1,19 +1,19 @@
 package com.example.demo.entity;
 
-
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import lombok.*;
-import lombok.experimental.FieldDefaults;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.Date;
 
-@Entity
 @Data
-@AllArgsConstructor
 @Builder
 @NoArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
+@AllArgsConstructor
+@Entity
 public class InvalidatedToken {
     @Id
     String id;

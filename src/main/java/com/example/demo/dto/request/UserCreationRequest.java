@@ -23,6 +23,7 @@ public class UserCreationRequest {
      String lastName;
      @DobConstraint(min = 10, message = "INVALID_DOB")
      LocalDate dob;
+     String email;
 //Đây là một lớp DTO (Data Transfer Object) được sử dụng để đóng gói dữ liệu cần thiết để tạo người dùng mới. Nó chứa các trường dữ liệu cho tên đăng nhập, mật khẩu, tên, họ và ngày sinh của người dùng, cùng với các phương thức getter và setter tương ứng.
 
 

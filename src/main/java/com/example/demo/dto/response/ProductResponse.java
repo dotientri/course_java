@@ -1,20 +1,21 @@
 package com.example.demo.dto.response;
 
-import lombok.*;
-import lombok.experimental.FieldDefaults;
-
+import lombok.Builder;
+import lombok.Data;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
 @Builder
-@FieldDefaults(level = AccessLevel.PRIVATE)
 public class ProductResponse {
-    String product_id;
-    String product_name;
-    String product_description;
-    String product_price;
-    List<String> product_image;
-    String product_category;
-    String product_type;
+    private Long productId;
+    private String productName;
+    private String description;
+    private BigDecimal price;
+    private List<String> colors;
+    private List<String> sizes;
+    private List<String> images; // Sẽ chứa các URL đến ảnh
+    private String categoryName; // Chỉ hiển thị tên Category cho gọn
+    private LocalDate createdAt;
 }

@@ -6,9 +6,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -26,8 +28,19 @@ import javax.crypto.spec.SecretKeySpec;
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
-    private final String[] PUBLIC_ENDPOINTS = {"/users", "/users/info", "/auth/token", "/auth/refresh",
-            "/auth/logout", "/auth/introspect", "/product/all"};
+    private static final String[] PUBLIC_GET_ENDPOINTS = {
+            "/products",
+            "/products/{id}",
+            "/products/category/{categoryId}",
+            "/products/color",
+            "/products/size",
+            "/products/search",
+            "/products/images/{fileName:.+}",
+            "/categories",
+            "/categories/{id}",
+            "/v3/api-docs/**", // Dành cho Swagger/OpenAPI
+            "/swagger-ui/**"   // Dành cho Swagger/OpenAPI
+    };
 
 
     @Autowired
@@ -36,12 +49,30 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
         httpSecurity
-                .cors().and() // Kích hoạt CORS
-                .csrf().disable() // Tắt CSRF
+                .cors(Customizer.withDefaults()) // Cách viết mới hơn
+                .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(request -> request
-                        .requestMatchers(HttpMethod.POST, PUBLIC_ENDPOINTS).permitAll() // Cho phép các endpoint công khai
-                        .requestMatchers(HttpMethod.GET, PUBLIC_ENDPOINTS).permitAll()
-                        .anyRequest().authenticated() // Các yêu cầu khác cần xác thực
+                        // Các endpoint xác thực luôn public
+                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, PUBLIC_GET_ENDPOINTS).permitAll()
+                        // --- QUYỀN CỦA USER (Bao gồm cả ADMIN) ---
+                        .requestMatchers("/users/info").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/cart/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/orders/place").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/orders", "/orders/{orderId}/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/payments/add").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/payments/{paymentId}").hasAnyRole("USER", "ADMIN")
+
+                        // --- QUYỀN CỦA ADMIN ---
+                        .requestMatchers(HttpMethod.POST, "/products", "/categories").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/products/{id}", "/categories/{id}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/products/{id}", "/categories/{id}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/products/upload/{id}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/orders/{orderId}/status", "/payments/{paymentId}/status").hasRole("ADMIN")
+                        .requestMatchers("/users", "/users/{userId}").hasRole("ADMIN")
+
+                        // Các endpoint khác đã được bảo vệ bằng @PreAuthorize, nên chỉ cần authenticated
+                        .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwtConfigurer -> jwtConfigurer
@@ -77,8 +108,5 @@ public class SecurityConfig {
 
 
 
-    @Bean
-    BCryptPasswordEncoder bCryptPasswordEncoder() {
-        return new BCryptPasswordEncoder(10);
-    }
-}   
+
+}
