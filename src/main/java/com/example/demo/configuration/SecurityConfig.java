@@ -46,30 +46,34 @@ public class SecurityConfig {
     @Autowired
     private CustomJwtDecoder customJwtDecoder;
 
+    // === THÊM DÒNG NÀY ===
+    // Tiêm giá trị từ application.properties vào biến frontendUrl
+    @Value("${app.frontend.url}")
+    private String frontendUrl;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
         httpSecurity
-                .cors(Customizer.withDefaults()) // Cách viết mới hơn
+                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Cấu hình CORS rõ ràng hơn
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(request -> request
                         // Các endpoint xác thực luôn public
-                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/auth/**", "/payments/**").permitAll() // Gộp payments vào đây
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_ENDPOINTS).permitAll()
                         // --- QUYỀN CỦA USER (Bao gồm cả ADMIN) ---
                         .requestMatchers("/users/info").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/cart/**").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers("/orders/place").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/orders", "/orders/{orderId}/**").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers("/payments/add").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/payments/{paymentId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/orders/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/addresses/**").hasAnyRole("USER", "ADMIN")
 
                         // --- QUYỀN CỦA ADMIN ---
                         .requestMatchers(HttpMethod.POST, "/products", "/categories").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/products/{id}", "/categories/{id}").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/products/{id}", "/categories/{id}").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/products/upload/{id}").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/orders/{orderId}/status", "/payments/{paymentId}/status").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/products/variants/{variantId}/upload").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/orders/{orderId}/status").hasRole("ADMIN")
                         .requestMatchers("/users", "/users/{userId}").hasRole("ADMIN")
+                        .requestMatchers("/roles/**", "/permission/**").hasRole("ADMIN")
 
                         // Các endpoint khác đã được bảo vệ bằng @PreAuthorize, nên chỉ cần authenticated
                         .anyRequest().authenticated()
@@ -87,10 +91,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.addAllowedOrigin("http://localhost:3000"); // Địa chỉ frontend
-        configuration.addAllowedMethod("*"); // Cho phép tất cả các phương thức HTTP
-        configuration.addAllowedHeader("*"); // Cho phép tất cả các header
-        configuration.setAllowCredentials(true); // Cho phép gửi cookie hoặc thông tin xác thực
+        // === SỬA DÒNG NÀY ===
+        // Sử dụng biến đã được tiêm thay vì hardcode
+        configuration.addAllowedOrigin(frontendUrl);
+        configuration.addAllowedMethod("*");
+        configuration.addAllowedHeader("*");
+        configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
@@ -105,8 +111,4 @@ public class SecurityConfig {
         jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(jwtGrantedAuthoritiesConverter);
         return jwtAuthenticationConverter;
     }
-
-
-
-
 }

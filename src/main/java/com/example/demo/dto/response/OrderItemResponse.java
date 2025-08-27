@@ -12,4 +12,7 @@ public class OrderItemResponse {
     private int quantity;
     private BigDecimal price; // Giá của sản phẩm tại thời điểm thêm vào giỏ/đặt hàng
     private String imageUrl; // URL ảnh đại diện của sản phẩm
+    private Long variantId;
+    private String color;
+    private String size;
 }

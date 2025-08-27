@@ -31,6 +31,15 @@ public class AuthenticationController {
                 .build();
     }
 
+    @PostMapping("/google")
+    public ApiResponse<AuthenticationResponse> loginWithGoogle(@RequestBody @Valid GoogleLoginRequest request) {
+        var result = authenticationService.loginWithGoogle(request);
+        return ApiResponse.<AuthenticationResponse>builder()
+                .result(result)
+                .message("Logged in with Google successfully.")
+                .build();
+    }
+
     @PostMapping("/register")
     public ApiResponse<UserResponse> register(@RequestBody @Valid UserCreationRequest request) {
         UserResponse userResponse = authenticationService.createUser(request);

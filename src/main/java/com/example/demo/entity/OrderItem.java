@@ -1,4 +1,3 @@
-// src/main/java/com/example/demo/entity/OrderItem.java
 package com.example.demo.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
@@ -12,26 +11,26 @@ import java.math.BigDecimal;
 @Data
 @Builder
 @NoArgsConstructor
-@AllArgsConstructor(access = AccessLevel.PACKAGE)
+@AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class OrderItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JsonBackReference("order-items")
     Order order;
 
-    @ManyToOne(optional = false)
-    Product product;
+    // THAY ĐỔI: Liên kết trực tiếp đến một biến thể sản phẩm cụ thể
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "variant_id", nullable = false)
+    ProductVariant variant;
 
     @Column(nullable = false)
     Integer quantity;
 
-    @Column(nullable = false)
-    Double priceAtOrder;
-
-    private BigDecimal price; // Giá của sản phẩm tại thời điểm đặt hàng
-
+    // THAY ĐỔI: Lưu giá của biến thể tại thời điểm đặt hàng để đảm bảo tính toàn vẹn dữ liệu
+    @Column(nullable = false, precision = 10, scale = 2)
+    BigDecimal priceAtOrder;
 }

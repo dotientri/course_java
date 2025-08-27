@@ -1,8 +1,12 @@
+// Sửa file: C:/Users/dotie/Documents/course_java/src/main/java/com/example/demo/controller/CartController.java
 package com.example.demo.controller;
 
 import com.example.demo.dto.request.ApiResponse;
+import com.example.demo.dto.request.CartItemRequest;
 import com.example.demo.dto.response.CartResponse;
 import com.example.demo.service.CartService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,48 +16,43 @@ import org.springframework.web.bind.annotation.*;
 public class CartController {
     private final CartService cartService;
 
-    /**
-     * Lấy thông tin giỏ hàng của người dùng hiện tại.
-     * Service sẽ tự động xử lý việc tạo giỏ hàng mới nếu chưa có.
-     */
     @GetMapping
-    public ApiResponse<CartResponse> getCart() {
+    public ApiResponse<CartResponse> getMyCart() {
         return ApiResponse.<CartResponse>builder()
-                .result(cartService.getCart())
+                .result(cartService.getCartForCurrentUser())
                 .build();
     }
 
     /**
-     * Thêm một sản phẩm vào giỏ hàng hoặc tăng số lượng nếu đã tồn tại.
+     * Thêm một biến thể sản phẩm vào giỏ hàng.
      */
-    @PostMapping("/add")
-    public ApiResponse<CartResponse> addItem(@RequestParam Long productId, @RequestParam int quantity) {
+    @PostMapping("/items")
+    public ApiResponse<CartResponse> addItemToCart(@Valid @RequestBody CartItemRequest request) {
         return ApiResponse.<CartResponse>builder()
-                .result(cartService.addItem(productId, quantity))
-                .message("Item added to cart")
+                .result(cartService.addItem(request.getVariantId(), request.getQuantity()))
+                .message("Item added to cart successfully")
                 .build();
     }
 
     /**
-     * Cập nhật số lượng của một sản phẩm trong giỏ hàng.
-     * Nếu số lượng là 0, sản phẩm sẽ bị xóa.
+     * Cập nhật số lượng của một biến thể trong giỏ hàng.
      */
-    @PatchMapping("/update")
-    public ApiResponse<CartResponse> updateItem(@RequestParam Long productId, @RequestParam int quantity) {
+    @PutMapping("/items/{variantId}")
+    public ApiResponse<CartResponse> updateItemInCart(@PathVariable Long variantId, @RequestParam @Min(0) int quantity) {
         return ApiResponse.<CartResponse>builder()
-                .result(cartService.updateItem(productId, quantity))
-                .message("Cart item updated")
+                .result(cartService.updateItem(variantId, quantity))
+                .message("Cart item updated successfully")
                 .build();
     }
 
     /**
-     * Xóa một sản phẩm khỏi giỏ hàng.
+     * Xóa một biến thể khỏi giỏ hàng.
      */
-    @DeleteMapping("/remove")
-    public ApiResponse<CartResponse> removeItem(@RequestParam Long productId) {
-        return ApiResponse.<CartResponse>builder()
-                .result(cartService.removeItem(productId))
-                .message("Item removed from cart")
+    @DeleteMapping("/items/{variantId}")
+    public ApiResponse<Void> removeItemFromCart(@PathVariable Long variantId) {
+        cartService.removeItem(variantId);
+        return ApiResponse.<Void>builder()
+                .message("Item removed from cart successfully")
                 .build();
     }
 

@@ -1,15 +1,23 @@
+// C:/Users/dotie/Documents/course_java/src/main/java/com/example/demo/dto/request/ProductCreationRequest.java
 package com.example.demo.dto.request;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import lombok.Data;
-import java.math.BigDecimal;
 import java.util.List;
 
 @Data
 public class ProductCreationRequest {
-    private String productName;
-    private String description;
-    private BigDecimal price;
-    private List<String> colors;
-    private List<String> sizes;
-    private Long categoryId; // Chỉ cần ID của category khi tạo
+    @NotBlank @Size(min = 3, max = 200)
+    String productName;
+
+    @NotBlank
+    String description;
+
+    @NotNull
+    Long categoryId;
+
+    @NotEmpty(message = "Sản phẩm phải có ít nhất một biến thể.")
+    @Valid // Quan trọng: để validate các object bên trong list
+    List<VariantCreationRequest> variants;
 }

@@ -1,4 +1,3 @@
-// src/main/java/com/example/demo/exception/ErrorCode.java
 package com.example.demo.exception;
 
 import lombok.Getter;
@@ -7,49 +6,48 @@ import org.springframework.http.HttpStatusCode;
 
 @Getter
 public enum ErrorCode {
-    UNCATEGORIZED_EXCEPTION(9999,"uncategorized exception", HttpStatus.INTERNAL_SERVER_ERROR),
-    INVALID_KEY(1001,"Invalid message key", HttpStatus.BAD_REQUEST),
-    USER_EXISTED(1002,"User already existed", HttpStatus.BAD_REQUEST),
-    EMAIL_EXISTED(1015, "Email already existed", HttpStatus.BAD_REQUEST), // <-- Mã lỗi mới
-    USERNAME_INVALID(1003,"username must be at least {min} characters", HttpStatus.BAD_REQUEST),
-    INVALID_PASSWORD(1004,"password  must be at least {min} characters", HttpStatus.BAD_REQUEST),
-    USER_NOT_EXISTED(1005,"user not existed", HttpStatus.NOT_FOUND),
-    UNAUTHENTICATED(1006,"Unauthenticated !", HttpStatus.UNAUTHORIZED),
-    UNAUTHORIZED(1007,"You do not have permission !", HttpStatus.FORBIDDEN),
-    INVALID_DOB(1008,"You must be at least {min} years old", HttpStatus.BAD_REQUEST),
-    TOKEN_EXPIRED(1009,"Token expired !", HttpStatus.UNAUTHORIZED),
-    LOGIN_FAILED(1010,"Login failed !", HttpStatus.BAD_REQUEST),
+    // === Lỗi Chung & Xác thực ===
+    UNCATEGORIZED_EXCEPTION(9999, "Lỗi không xác định", HttpStatus.INTERNAL_SERVER_ERROR),
+    INVALID_KEY(1001, "Mã khóa không hợp lệ", HttpStatus.BAD_REQUEST),
+    UNAUTHENTICATED(1007, "Chưa xác thực", HttpStatus.UNAUTHORIZED),
+    UNAUTHORIZED(1008, "Bạn không có quyền truy cập", HttpStatus.FORBIDDEN),
+    INVALID_TOKEN(1016, "Token không hợp lệ", HttpStatus.UNAUTHORIZED),
+    TOKEN_EXPIRED(1010, "Token đã hết hạn", HttpStatus.UNAUTHORIZED),
 
-    OTP_EXPIRED(1010, "OTP has expired.", HttpStatus.BAD_REQUEST),
-    // THÊM MÃ LỖI MỚI VÀO ĐÂY
-    OTP_COOLDOWN(1011, "Please wait a moment before requesting a new OTP.", HttpStatus.BAD_REQUEST),
+    // === Lỗi liên quan đến User & Auth ===
+    USER_EXISTED(1002, "Người dùng đã tồn tại", HttpStatus.BAD_REQUEST),
+    EMAIL_EXISTED(1003, "Email đã tồn tại", HttpStatus.BAD_REQUEST),
+    USER_NOT_EXISTED(1006, "Người dùng không tồn tại", HttpStatus.NOT_FOUND),
+    USERNAME_INVALID(1004, "Tên người dùng phải có ít nhất {min} ký tự", HttpStatus.BAD_REQUEST),
+    INVALID_PASSWORD(1005, "Mật khẩu phải có ít nhất {min} ký tự", HttpStatus.BAD_REQUEST),
+    LOGIN_FAILED(1011, "Đăng nhập thất bại", HttpStatus.UNAUTHORIZED),
+    EMAIL_NOT_VERIFIED(1015, "Email chưa được xác thực", HttpStatus.UNAUTHORIZED),
+    INVALID_OTP(1017, "Mã OTP không hợp lệ", HttpStatus.BAD_REQUEST),
+    OTP_EXPIRED(1013, "Mã OTP đã hết hạn", HttpStatus.BAD_REQUEST),
+    OTP_COOLDOWN(1014, "Vui lòng đợi một lát trước khi yêu cầu mã OTP mới", HttpStatus.BAD_REQUEST),
 
-    // Các mã lỗi mới cho xác thực và OTP
-    EMAIL_NOT_VERIFIED(1011, "Email has not been verified", HttpStatus.UNAUTHORIZED),
-    INVALID_TOKEN(1012, "Invalid verification token", HttpStatus.BAD_REQUEST),
-    INVALID_OTP(1013, "Invalid OTP", HttpStatus.BAD_REQUEST),
+    // === Lỗi liên quan đến Product, Category, Attribute ===
+    CATEGORY_EXISTED(2001, "Danh mục đã tồn tại", HttpStatus.BAD_REQUEST),
+    CATEGORY_NOT_EXISTED(2002, "Danh mục không tồn tại", HttpStatus.NOT_FOUND),
+    PRODUCT_EXISTED(2003, "Sản phẩm đã tồn tại", HttpStatus.BAD_REQUEST),
+    PRODUCT_NOT_EXISTED(2004, "Sản phẩm không tồn tại", HttpStatus.NOT_FOUND),
+    VARIANT_NOT_EXISTED(2005, "Biến thể sản phẩm không tồn tại", HttpStatus.NOT_FOUND),
+    ATTRIBUTE_NOT_FOUND(2006, "Thuộc tính không tồn tại", HttpStatus.NOT_FOUND),
+    ATTRIBUTE_VALUE_NOT_FOUND(2007, "Một hoặc nhiều giá trị thuộc tính không tồn tại", HttpStatus.NOT_FOUND),
 
-    // Các mã lỗi khác
-    CART_EMPTY(2001, "Cart is empty", HttpStatus.BAD_REQUEST),
-    ADDRESS_NOT_FOUND(2002, "Address not found", HttpStatus.NOT_FOUND),
-    ORDER_NOT_FOUND(2003, "Order not found", HttpStatus.NOT_FOUND),
-    PRODUCT_NOT_FOUND(2004, "Product not found", HttpStatus.NOT_FOUND),
-    INVALID_PAYMENT_METHOD(2005, "Invalid payment method", HttpStatus.BAD_REQUEST),
-    PAYMENT_NOT_FOUND(2006, "Payment not found", HttpStatus.NOT_FOUND),
+    // === Lỗi liên quan đến Cart, Order, Stock ===
+    CART_NOT_FOUND(3001, "Không tìm thấy giỏ hàng", HttpStatus.NOT_FOUND),
+    CART_EMPTY(3002, "Giỏ hàng trống", HttpStatus.BAD_REQUEST),
+    ITEM_NOT_IN_CART(3003, "Sản phẩm không có trong giỏ hàng", HttpStatus.NOT_FOUND),
+    INVALID_QUANTITY(3004, "Số lượng không hợp lệ", HttpStatus.BAD_REQUEST),
+    INSUFFICIENT_STOCK(3005, "Số lượng tồn kho không đủ", HttpStatus.BAD_REQUEST),
+    ORDER_NOT_FOUND(3006, "Đơn hàng không tồn tại", HttpStatus.NOT_FOUND),
+    ADDRESS_NOT_FOUND(3007, "Địa chỉ không tồn tại", HttpStatus.NOT_FOUND),
 
-    // GỢI Ý THÊM CÁC MÃ LỖI MỚI
-    INSUFFICIENT_STOCK(2007, "Product is out of stock", HttpStatus.BAD_REQUEST),
-    INVALID_QUANTITY(2008, "Quantity must be at least 1", HttpStatus.BAD_REQUEST),
-    COUPON_INVALID(2009, "Coupon is not valid or has expired", HttpStatus.BAD_REQUEST),
-    CATEGORY_NOT_EXISTED(1012, "Category does not exist.", HttpStatus.NOT_FOUND),
-
-    // ADD THIS LINE
-    PRODUCT_NOT_EXISTED(1013, "Product does not exist.", HttpStatus.NOT_FOUND),
-    ITEM_NOT_IN_CART(1015, "The specified item is not in the cart", HttpStatus.NOT_FOUND),
-    CART_NOT_FOUND(1016, "Cart not found for the current user", HttpStatus.NOT_FOUND),
-
-    ;
-
+    // === Lỗi liên quan đến Payment (PHẦN SỬA LỖI) ===
+    INVALID_PAYMENT_METHOD(4001, "Phương thức thanh toán không hợp lệ", HttpStatus.BAD_REQUEST),
+    INVALID_AMOUNT(4003, "Số tiền giao dịch không hợp lệ", HttpStatus.BAD_REQUEST), // FIX: Sửa lại message
+    PAYMENT_NOT_FOUND(4002, "Không tìm thấy thông tin thanh toán", HttpStatus.NOT_FOUND);
     ErrorCode(int code, String message, HttpStatusCode statusCode) {
         this.code = code;
         this.message = message;

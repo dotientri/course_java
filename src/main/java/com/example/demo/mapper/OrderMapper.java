@@ -2,35 +2,81 @@ package com.example.demo.mapper;
 
 import com.example.demo.dto.response.OrderItemResponse;
 import com.example.demo.dto.response.OrderResponse;
+import com.example.demo.entity.Address; // QUAN TRỌNG: Thêm import này
+import com.example.demo.entity.AttributeValue;
 import com.example.demo.entity.Order;
 import com.example.demo.entity.OrderItem;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.Named;
 
-import java.util.List; // Make sure this import is present
+import java.util.List;
+import java.util.Set;
 
 @Mapper(componentModel = "spring")
 public interface OrderMapper {
 
-    // This mapping will now work because you added getFullAddress() to the Address entity
     @Mapping(source = "id", target = "orderId")
-    @Mapping(source = "address.fullAddress", target = "shippingAddress")
+    // THAY ĐỔI: Sử dụng phương thức tùy chỉnh để tạo địa chỉ giao hàng
+    @Mapping(source = "address", target = "shippingAddress", qualifiedByName = "mapAddressToString")
+    @Mapping(source = "orderItems", target = "items")
     OrderResponse toOrderResponse(Order order);
 
-    // This tells MapStruct how to map an OrderItem entity to an OrderItemResponse DTO
-    @Mapping(source = "product.productId", target = "productId") // CORRECTED: Assumes the field in Product is "productId"
-    @Mapping(source = "product.productName", target = "productName")
-    @Mapping(source = "product.images", target = "imageUrl") // CHANGED: We now map the whole list and let the custom method below handle it.
+    // Ánh xạ từ OrderItem entity sang OrderItemResponse DTO
+    @Mapping(source = "variant.product.productId", target = "productId")
+    @Mapping(source = "variant.product.productName", target = "productName")
+    @Mapping(source = "variant.variantId", target = "variantId")
+    @Mapping(source = "priceAtOrder", target = "price") // Lấy giá đã lưu tại thời điểm đặt hàng
+    @Mapping(source = "variant.images", target = "imageUrl", qualifiedByName = "mapFirstImage")
+    @Mapping(source = "variant.attributes", target = "color", qualifiedByName = "mapColorFromAttributes")
+    @Mapping(source = "variant.attributes", target = "size", qualifiedByName = "mapSizeFromAttributes")
     OrderItemResponse toOrderItemResponse(OrderItem orderItem);
 
-    // ADD THIS CUSTOM METHOD
-    // This default method provides custom logic for MapStruct.
-    // When it sees a mapping from List<String> (images) to String (imageUrl), it will use this method.
-    default String mapImageUrlFromImages(List<String> images) {
+    // Helper method để lấy ảnh đầu tiên từ danh sách
+    @Named("mapFirstImage")
+    default String mapFirstImage(List<String> images) {
         if (images == null || images.isEmpty()) {
-            return null; // Or you can return a URL to a default placeholder image
+            return null; // Hoặc trả về một URL ảnh mặc định
         }
-        // Return the first image in the list as the thumbnail
         return images.get(0);
+    }
+
+    // Helper method để trích xuất giá trị "Màu sắc" từ Set<AttributeValue>
+    @Named("mapColorFromAttributes")
+    default String mapColorFromAttributes(Set<AttributeValue> attributes) {
+        if (attributes == null) {
+            return null;
+        }
+        return attributes.stream()
+                .filter(attr -> "Màu sắc".equalsIgnoreCase(attr.getAttribute().getName()))
+                .map(AttributeValue::getValue)
+                .findFirst()
+                .orElse(null);
+    }
+
+    // Helper method để trích xuất giá trị "Kích thước" từ Set<AttributeValue>
+    @Named("mapSizeFromAttributes")
+    default String mapSizeFromAttributes(Set<AttributeValue> attributes) {
+        if (attributes == null) {
+            return null;
+        }
+        return attributes.stream()
+                .filter(attr -> "Kích thước".equalsIgnoreCase(attr.getAttribute().getName()))
+                .map(AttributeValue::getValue)
+                .findFirst()
+                .orElse(null);
+    }
+
+    // THÊM MỚI: Helper method để chuyển đổi Address entity thành chuỗi địa chỉ đầy đủ
+    @Named("mapAddressToString")
+    default String mapAddressToString(Address address) {
+        if (address == null) {
+            return null;
+        }
+        return String.join(", ",
+                address.getStreet(),
+                address.getWard(),
+                address.getDistrict(),
+                address.getProvince());
     }
 }

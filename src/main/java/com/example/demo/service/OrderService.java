@@ -1,3 +1,4 @@
+// C:/Users/dotie/Documents/course_java/src/main/java/com/example/demo/service/OrderService.java
 package com.example.demo.service;
 
 import com.example.demo.dto.response.OrderResponse;
@@ -21,19 +22,16 @@ import java.util.stream.Collectors;
 @Slf4j
 public class OrderService {
 
-    // Các repository và mapper cần thiết
     private final OrderRepository orderRepository;
     private final CartRepository cartRepository;
     private final AddressRepository addressRepository;
     private final UserRepository userRepository;
+    private final ProductVariantRepository variantRepository;
     private final OrderMapper orderMapper;
 
     @Transactional
     public OrderResponse placeOrder(Long addressId, String paymentMethod) {
-        // 1. Lấy thông tin người dùng hiện tại từ Spring Security
         User currentUser = getCurrentUser();
-
-        // 2. Tìm giỏ hàng của người dùng và kiểm tra xem có trống không
         Cart cart = cartRepository.findByUser(currentUser)
                 .orElseThrow(() -> new AppException(ErrorCode.CART_EMPTY));
 
@@ -41,49 +39,80 @@ public class OrderService {
             throw new AppException(ErrorCode.CART_EMPTY);
         }
 
-        // 3. Tìm địa chỉ giao hàng, đảm bảo địa chỉ này thuộc về người dùng hiện tại
         Address shippingAddress = addressRepository.findByIdAndUser(addressId, currentUser)
                 .orElseThrow(() -> new AppException(ErrorCode.ADDRESS_NOT_FOUND));
 
-        // 4. Tạo đối tượng Order mới
         Order newOrder = new Order();
         newOrder.setUser(currentUser);
         newOrder.setAddress(shippingAddress);
         newOrder.setOrderDate(java.time.LocalDate.now());
-        newOrder.setStatus("PENDING"); // Trạng thái ban đầu
         newOrder.setTotalAmount(cart.getTotalPrice());
         newOrder.setPaymentMethod(paymentMethod);
 
-        // 5. Chuyển các sản phẩm từ CartItem sang OrderItem bằng Stream API cho code gọn hơn
+        // === FIX QUAN TRỌNG: Đặt trạng thái chính xác ===
+        if ("VNPAY".equalsIgnoreCase(paymentMethod)) {
+            newOrder.setStatus("PENDING_PAYMENT"); // Phải là PENDING_PAYMENT để logic IPN hoạt động
+        } else {
+            newOrder.setStatus("PENDING"); // Trạng thái cho các phương thức khác (ví dụ: COD)
+        }
+
         List<OrderItem> orderItems = cart.getCartItems().stream()
                 .map(cartItem -> {
-                    OrderItem orderItem = new OrderItem();
-                    orderItem.setOrder(newOrder);
-                    orderItem.setProduct(cartItem.getProduct());
-                    orderItem.setQuantity(cartItem.getQuantity());
-                    orderItem.setPrice(cartItem.getProduct().getPrice()); // Lấy giá tại thời điểm đặt hàng
-                    return orderItem;
+                    ProductVariant variant = cartItem.getVariant();
+                    if (variant.getStock() < cartItem.getQuantity()) {
+                        throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
+                    }
+                    // Trừ tồn kho
+                    variant.setStock(variant.getStock() - cartItem.getQuantity());
+                    variantRepository.save(variant);
+
+                    return OrderItem.builder()
+                            .order(newOrder)
+                            .variant(variant)
+                            .quantity(cartItem.getQuantity())
+                            .priceAtOrder(variant.getSalePrice() != null ? variant.getSalePrice() : variant.getPrice())
+                            .build();
                 }).collect(Collectors.toList());
 
-        newOrder.setItems(orderItems);
-
-        // 6. Lưu Order và các OrderItem (nhờ CascadeType.ALL trong Entity)
+        newOrder.setOrderItems(orderItems);
         Order savedOrder = orderRepository.save(newOrder);
 
-        // 7. Xóa giỏ hàng sau khi đã đặt hàng thành công
+        // Xóa giỏ hàng sau khi đã đặt hàng thành công
         cartRepository.delete(cart);
 
-        // 8. Chuyển đổi Order entity đã lưu sang OrderResponse DTO để trả về
         log.info("User '{}' placed order successfully with ID: {}", currentUser.getUsername(), savedOrder.getId());
         return orderMapper.toOrderResponse(savedOrder);
     }
 
+    @Transactional
+    public void confirmPayment(Long orderId, long vnpayAmount) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (!"PENDING_PAYMENT".equalsIgnoreCase(order.getStatus())) {
+            log.warn("Order {} already processed or has an invalid status, skipping IPN.", orderId);
+            return;
+        }
+
+        // FIX: Convert BigDecimal to double before rounding
+        long orderAmount = Math.round(order.getTotalAmount().doubleValue());
+        if (orderAmount != vnpayAmount) {
+            log.error("Amount mismatch for order {}. Expected: {}, Actual: {}", orderId, orderAmount, vnpayAmount);
+            order.setStatus("PAYMENT_FAILED_AMOUNT_MISMATCH");
+            orderRepository.save(order);
+            throw new AppException(ErrorCode.INVALID_AMOUNT);
+        }
+
+        order.setStatus("PAID");
+        orderRepository.save(order);
+        log.info("Payment confirmed for orderId: {}. Status updated to PAID.", orderId);
+    }
+
+    // ... other methods ...
     @Transactional(readOnly = true)
     public List<OrderResponse> getMyOrders() {
         User currentUser = getCurrentUser();
         List<Order> orders = orderRepository.findByUserOrderByOrderDateDesc(currentUser);
-
-        // Chuyển đổi danh sách Order entities sang danh sách OrderResponse DTOs
         return orders.stream()
                 .map(orderMapper::toOrderResponse)
                 .collect(Collectors.toList());
@@ -94,11 +123,9 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
-        // **BỔ SUNG QUAN TRỌNG:** Kiểm tra quyền truy cập
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.getRoles().stream().anyMatch(role -> role.getName().equals("ROLE_ADMIN"));
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(role -> role.getName().equals("ADMIN"));
 
-        // Cho phép truy cập nếu là admin hoặc nếu đơn hàng này thuộc về người dùng hiện tại
         if (!isAdmin && !Objects.equals(order.getUser().getId(), currentUser.getId())) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
@@ -108,18 +135,15 @@ public class OrderService {
 
     @Transactional
     public OrderResponse updateOrderStatus(Long orderId, String status) {
-        // Logic này thường chỉ dành cho Admin
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
         order.setStatus(status);
         Order updatedOrder = orderRepository.save(order);
-
         log.info("Order ID {} status updated to '{}' by an administrator.", updatedOrder.getId(), status);
         return orderMapper.toOrderResponse(updatedOrder);
     }
 
-    // Helper method để tránh lặp code lấy thông tin người dùng
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)

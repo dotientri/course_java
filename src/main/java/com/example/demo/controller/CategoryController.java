@@ -13,14 +13,13 @@ import java.util.List;
 @RestController
 @RequestMapping("/categories")
 @RequiredArgsConstructor // **Sử dụng Constructor Injection**
-public class CategoryController {
+public class    CategoryController {
 
     private final CategoryService categoryService;
 
     @PostMapping
     public ApiResponse<CategoryResponse> create(@RequestBody CategoryRequest request) {
         return ApiResponse.<CategoryResponse>builder()
-                .code(HttpStatus.CREATED.value())
                 .result(categoryService.createCategory(request)) // Service nhận và trả về DTO
                 .build();
     }

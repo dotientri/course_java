@@ -2,21 +2,25 @@ package com.example.demo.service;
 
 import com.example.demo.dto.request.ProductCreationRequest;
 import com.example.demo.dto.response.ProductResponse;
+import com.example.demo.entity.AttributeValue;
 import com.example.demo.entity.Category;
 import com.example.demo.entity.Product;
+import com.example.demo.entity.ProductVariant;
 import com.example.demo.exception.AppException;
 import com.example.demo.exception.ErrorCode;
 import com.example.demo.mapper.ProductMapper;
+import com.example.demo.repository.AttributeValueRepository;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.ProductRepository;
+import com.example.demo.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,18 +30,37 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final ProductVariantRepository variantRepository;
     private final ProductMapper productMapper;
+    private final AttributeValueRepository attributeValueRepository;
 
     @Transactional
     public ProductResponse createProduct(ProductCreationRequest request) {
-        Product product = productMapper.toProduct(request);
-
+        if (productRepository.existsByProductName(request.getProductName())) {
+            throw new AppException(ErrorCode.PRODUCT_EXISTED);
+        }
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new AppException(ErrorCode.CATEGORY_NOT_EXISTED));
 
+        Product product = productMapper.toProduct(request);
         product.setCategory(category);
-        product.setCreatedAt(LocalDate.now());
-        product.setUpdatedAt(LocalDateTime.now());
+
+        List<ProductVariant> variants = request.getVariants().stream()
+                .map(variantRequest -> {
+                    ProductVariant variant = productMapper.toProductVariant(variantRequest);
+                    variant.setProduct(product);
+
+                    if (variantRequest.getAttributeValueIds() != null && !variantRequest.getAttributeValueIds().isEmpty()) {
+                        Set<AttributeValue> attrs = new HashSet<>(attributeValueRepository.findAllById(variantRequest.getAttributeValueIds()));
+                        if (attrs.size() != variantRequest.getAttributeValueIds().size()) {
+                            throw new AppException(ErrorCode.ATTRIBUTE_VALUE_NOT_FOUND);
+                        }
+                        variant.setAttributes(attrs);
+                    }
+                    return variant;
+                }).collect(Collectors.toList());
+
+        product.setVariants(variants);
 
         Product savedProduct = productRepository.save(product);
         return productMapper.toProductResponse(savedProduct);
@@ -46,32 +69,41 @@ public class ProductService {
     @Transactional
     public ProductResponse updateProduct(Long id, ProductCreationRequest request) {
         Product product = findProductById(id);
+        productMapper.updateProduct(product, request);
 
-        // Dùng mapper để cập nhật các trường cơ bản
-        product.setProductName(request.getProductName());
-        product.setDescription(request.getDescription());
-        product.setPrice(request.getPrice());
-        product.setColors(request.getColors());
-        product.setSizes(request.getSizes());
+        Category category = categoryRepository.findById(request.getCategoryId())
+                .orElseThrow(() -> new AppException(ErrorCode.CATEGORY_NOT_EXISTED));
+        product.setCategory(category);
 
-        // Cập nhật category nếu có
-        if (request.getCategoryId() != null) {
-            Category category = categoryRepository.findById(request.getCategoryId())
-                    .orElseThrow(() -> new AppException(ErrorCode.CATEGORY_NOT_EXISTED));
-            product.setCategory(category);
-        }
+        product.getVariants().clear();
 
-        product.setUpdatedAt(LocalDateTime.now());
+        List<ProductVariant> newVariants = request.getVariants().stream()
+                .map(variantRequest -> {
+                    ProductVariant variant = productMapper.toProductVariant(variantRequest);
+                    variant.setProduct(product);
+
+                    if (variantRequest.getAttributeValueIds() != null && !variantRequest.getAttributeValueIds().isEmpty()) {
+                        Set<AttributeValue> attrs = new HashSet<>(attributeValueRepository.findAllById(variantRequest.getAttributeValueIds()));
+                        if (attrs.size() != variantRequest.getAttributeValueIds().size()) {
+                            throw new AppException(ErrorCode.ATTRIBUTE_VALUE_NOT_FOUND);
+                        }
+                        variant.setAttributes(attrs);
+                    }
+                    return variant;
+                }).collect(Collectors.toList());
+
+        product.getVariants().addAll(newVariants);
+
         Product updatedProduct = productRepository.save(product);
         return productMapper.toProductResponse(updatedProduct);
     }
 
     @Transactional
-    public void addProductImage(Long productId, String imageName) {
-        Product product = findProductById(productId);
-        List<String> images = product.getImages();
-        images.add(imageName); // Thêm ảnh mới vào danh sách
-        productRepository.save(product);
+    public void addImageToVariant(Long variantId, String imageName) {
+        ProductVariant variant = variantRepository.findById(variantId)
+                .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_EXISTED));
+        variant.getImages().add(imageName);
+        variantRepository.save(variant);
     }
 
     @Transactional
@@ -82,7 +114,6 @@ public class ProductService {
         productRepository.deleteById(id);
     }
 
-    // CÁC PHƯƠNG THỨC GET VÀ TÌM KIẾM ĐỀU TRẢ VỀ DTO
     public ProductResponse getProduct(Long id) {
         Product product = findProductById(id);
         return productMapper.toProductResponse(product);
@@ -100,14 +131,9 @@ public class ProductService {
                 .collect(Collectors.toList());
     }
 
-    public List<ProductResponse> findByColor(String color) {
-        return productRepository.findByColorsContainingIgnoreCase(color).stream()
-                .map(productMapper::toProductResponse)
-                .collect(Collectors.toList());
-    }
-
-    public List<ProductResponse> findBySize(String size) {
-        return productRepository.findBySizesContainingIgnoreCase(size).stream()
+    // PHƯƠNG THỨC THAY THẾ CHO findByColor và findBySize
+    public List<ProductResponse> findByAttribute(String attributeName, String attributeValue) {
+        return productRepository.findByAttribute(attributeName, attributeValue).stream()
                 .map(productMapper::toProductResponse)
                 .collect(Collectors.toList());
     }
@@ -118,9 +144,8 @@ public class ProductService {
                 .collect(Collectors.toList());
     }
 
-    // Helper method để tránh lặp code
     private Product findProductById(Long id) {
-        return productRepository.findById(id)
+        return productRepository.findByIdWithVariants(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_EXISTED));
     }
 }

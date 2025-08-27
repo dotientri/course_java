@@ -5,6 +5,7 @@ import com.example.demo.dto.request.ProductCreationRequest;
 import com.example.demo.dto.response.ProductResponse;
 import com.example.demo.service.IStorageService;
 import com.example.demo.service.ProductService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -23,7 +24,7 @@ public class ProductController {
     private final ProductService productService;
     private final IStorageService storageService;
 
-    // =================== PUBLIC ENDPOINTS ===================
+    // ... (Các endpoint GET, POST, PUT, DELETE khác giữ nguyên)
     @GetMapping
     public ApiResponse<List<ProductResponse>> getAllProducts() {
         return ApiResponse.<List<ProductResponse>>builder()
@@ -45,17 +46,11 @@ public class ProductController {
                 .build();
     }
 
-    @GetMapping("/color")
-    public ApiResponse<List<ProductResponse>> getByColor(@RequestParam String color) {
+    // ENDPOINT MỚI: Linh hoạt hơn, thay thế cho /color và /size
+    @GetMapping("/filter")
+    public ApiResponse<List<ProductResponse>> getByAttribute(@RequestParam String name, @RequestParam String value) {
         return ApiResponse.<List<ProductResponse>>builder()
-                .result(productService.findByColor(color))
-                .build();
-    }
-
-    @GetMapping("/size")
-    public ApiResponse<List<ProductResponse>> getBySize(@RequestParam String size) {
-        return ApiResponse.<List<ProductResponse>>builder()
-                .result(productService.findBySize(size))
+                .result(productService.findByAttribute(name, value))
                 .build();
     }
 
@@ -74,10 +69,9 @@ public class ProductController {
                 .body(bytes);
     }
 
-    // =================== ADMIN-ONLY ENDPOINTS ===================
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<ProductResponse> createProduct(@RequestBody ProductCreationRequest request) {
+    public ApiResponse<ProductResponse> createProduct(@Valid @RequestBody ProductCreationRequest request) {
         return ApiResponse.<ProductResponse>builder()
                 .code(HttpStatus.CREATED.value())
                 .result(productService.createProduct(request))
@@ -86,20 +80,20 @@ public class ProductController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<ProductResponse> updateProduct(@PathVariable Long id, @RequestBody ProductCreationRequest request) {
+    public ApiResponse<ProductResponse> updateProduct(@PathVariable Long id, @Valid @RequestBody ProductCreationRequest request) {
         return ApiResponse.<ProductResponse>builder()
                 .result(productService.updateProduct(id, request))
                 .build();
     }
 
-    @PostMapping("/upload/{id}")
+    @PostMapping("/variants/{variantId}/upload")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<String> uploadImage(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+    public ApiResponse<String> uploadImageForVariant(@PathVariable Long variantId, @RequestParam("file") MultipartFile file) {
         String generatedFileName = storageService.storeFile(file);
-        productService.addProductImage(id, generatedFileName);
+        productService.addImageToVariant(variantId, generatedFileName);
         String imageUrl = "/products/images/" + generatedFileName;
         return ApiResponse.<String>builder()
-                .message("Image uploaded successfully for product id: " + id)
+                .message("Image uploaded successfully for variant id: " + variantId)
                 .result(imageUrl)
                 .build();
     }

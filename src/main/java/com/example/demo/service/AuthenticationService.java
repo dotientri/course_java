@@ -6,6 +6,7 @@ import com.example.demo.dto.response.IntrospectResponse;
 import com.example.demo.dto.response.UserResponse;
 import com.example.demo.entity.Cart;
 import com.example.demo.entity.InvalidatedToken;
+import com.example.demo.entity.Role;
 import com.example.demo.entity.User;
 import com.example.demo.exception.AppException;
 import com.example.demo.exception.ErrorCode;
@@ -14,6 +15,10 @@ import com.example.demo.repository.CartRepository;
 import com.example.demo.repository.InvalidatedTokenRepository;
 import com.example.demo.repository.RoleRepository;
 import com.example.demo.repository.UserRepository;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
@@ -30,6 +35,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.text.ParseException;
 import java.time.Duration;
@@ -56,59 +63,177 @@ public class AuthenticationService {
     @Value("${jwt.signerKey}")
     protected String SIGNER_KEY;
 
-    // PHƯƠNG THỨC ĐƯỢC THÊM LẠI ĐỂ SỬA LỖI
+    @NonFinal
+    @Value("${google.oauth2.client-id}")
+    private String googleClientId;
+
+    @Transactional
+    public AuthenticationResponse loginWithGoogle(GoogleLoginRequest request) {
+        GoogleIdToken.Payload payload = verifyGoogleIdToken(request.getIdToken());
+
+        // Use a flag to track if the user is new.
+        // AtomicBoolean is used because its value can be changed from within a lambda.
+        final var isNewUser = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        User user = userRepository.findByEmail(payload.getEmail())
+                .orElseGet(() -> {
+                    // Mark this as a new user
+                    isNewUser.set(true);
+                    // Call the existing method to create the user
+                    return createUserFromGoogle(payload);
+                });
+
+        // After getting the user (either old or new), check the isNewUser flag
+        if (isNewUser.get()) {
+            // If it's a new user, send the welcome email
+            String fullName = (String) payload.get("name");
+            emailService.sendWelcomeEmailForGoogleUser(user.getEmail(), fullName);
+        }
+
+        // Generate a token and return the response as usual
+        String token = generateToken(user);
+        return AuthenticationResponse.builder()
+                .token(token)
+                .authenticated(true)
+                .build();
+    }
+
+    private GoogleIdToken.Payload verifyGoogleIdToken(String idTokenString) {
+        log.info("Verifying token with Google Client ID: '{}'", googleClientId);
+
+        GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
+                .setAudience(Collections.singletonList(googleClientId))
+                .build();
+
+        try {
+            GoogleIdToken idToken = verifier.verify(idTokenString);
+            if (idToken != null) {
+                return idToken.getPayload();
+            } else {
+                throw new AppException(ErrorCode.UNAUTHENTICATED, "Invalid Google ID Token.");
+            }
+        } catch (GeneralSecurityException | IOException e) {
+            log.error("Error verifying Google ID Token", e);
+            throw new AppException(ErrorCode.UNAUTHENTICATED, "Token verification failed.");
+        }
+    }
+
+    private User createUserFromGoogle(GoogleIdToken.Payload payload) {
+        Role userRole = roleRepository.findByName("USER")
+                .orElseThrow(() -> new RuntimeException("FATAL: USER role not found."));
+
+        String baseUsername = payload.getEmail().split("@")[0].replaceAll("[^a-zA-Z0-9]", "");
+        String username = baseUsername;
+        int counter = 1;
+        while (userRepository.existsByUsername(username)) {
+            username = baseUsername + counter++;
+        }
+
+        String fullName = (String) payload.get("name");
+        String firstName = "";
+        String lastName = "";
+        if (fullName != null && !fullName.trim().isEmpty()) {
+            String[] nameParts = fullName.split("\\s+", 2);
+            firstName = nameParts[0];
+            if (nameParts.length > 1) {
+                lastName = nameParts[1];
+            }
+        }
+
+        User newUser = User.builder()
+                .email(payload.getEmail())
+                .username(username)
+                .firstName(firstName)
+                .lastName(lastName)
+                .password(passwordEncoder.encode(java.util.UUID.randomUUID().toString()))
+                .emailVerified(true)
+                .roles(new HashSet<>(Collections.singletonList(userRole)))
+                .build();
+
+        User savedUser = userRepository.save(newUser);
+        Cart cart = new Cart();
+        cart.setUser(savedUser);
+        cartRepository.save(cart);
+        return savedUser;
+    }
+
     public IntrospectResponse introspect(IntrospectRequest request)
             throws JOSEException, ParseException {
         var token = request.getToken();
         boolean isValid = true;
         try {
-            verifyToken(token, false); // isLogout = false, chỉ kiểm tra tính hợp lệ
+            verifyToken(token, false);
         } catch (AppException e) {
             isValid = false;
         }
         return IntrospectResponse.builder().valid(isValid).build();
     }
 
+    @Transactional
     public UserResponse createUser(UserCreationRequest request) {
-        // 1. Kiểm tra username và email đã tồn tại
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new AppException(ErrorCode.USER_EXISTED);
+        Optional<User> userByEmailOpt = userRepository.findByEmail(request.getEmail());
+
+        if (userByEmailOpt.isPresent()) {
+            User existingUser = userByEmailOpt.get();
+            if (existingUser.isEmailVerified()) {
+                throw new AppException(ErrorCode.EMAIL_EXISTED);
+            }
+
+            userRepository.findByUsername(request.getUsername()).ifPresent(userWithSameUsername -> {
+                if (!userWithSameUsername.getId().equals(existingUser.getId())) {
+                    throw new AppException(ErrorCode.USER_EXISTED);
+                }
+            });
+
+            log.info("Email {} exists but is not verified. Overwriting registration info for user ID: {}",
+                    request.getEmail(), existingUser.getId());
+
+            existingUser.setUsername(request.getUsername());
+            existingUser.setPassword(passwordEncoder.encode(request.getPassword()));
+
+            String otp = generateOtp();
+            existingUser.setOtp(otp);
+            existingUser.setOtpGeneratedTime(LocalDateTime.now());
+
+            User savedUser = userRepository.save(existingUser);
+            emailService.sendVerificationOtp(savedUser.getEmail(), otp);
+
+            return userMapper.toUserResponse(savedUser);
+        } else {
+            if (userRepository.existsByUsername(request.getUsername())) {
+                throw new AppException(ErrorCode.USER_EXISTED);
+            }
+
+            log.info("Email {} is new. Creating a new user.", request.getEmail());
+
+            User newUser = userMapper.toUser(request);
+            newUser.setPassword(passwordEncoder.encode(request.getPassword()));
+
+            String otp = generateOtp();
+            newUser.setOtp(otp);
+            newUser.setOtpGeneratedTime(LocalDateTime.now());
+            newUser.setEmailVerified(false);
+
+            Role userRole = roleRepository.findByName("USER")
+                    .orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Default role USER not found in database"));
+            newUser.setRoles(Set.of(userRole));
+
+            User savedUser = userRepository.save(newUser);
+
+            Cart newCart = new Cart();
+            newCart.setUser(savedUser);
+            cartRepository.save(newCart);
+            log.info("Cart created for user {}", savedUser.getUsername());
+
+            emailService.sendVerificationOtp(savedUser.getEmail(), otp);
+
+            return userMapper.toUserResponse(savedUser);
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new AppException(ErrorCode.EMAIL_EXISTED);
-        }
+    }
 
-        // 2. Map DTO sang Entity và mã hóa mật khẩu
-        User user = userMapper.toUser(request);
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-
-        // 3. THAY ĐỔI: Tạo mã OTP 6 chữ số
-        Random random = new Random();
-        String otp = String.format("%06d", random.nextInt(999999)); // Tạo số ngẫu nhiên 6 chữ số
-
-        user.setOtp(otp);
-        user.setOtpGeneratedTime(LocalDateTime.now()); // Ghi lại thời gian tạo
-        user.setEmailVerified(false); // Đặt trạng thái chưa xác thực
-
-        // 4. Gán vai trò (Role) mặc định
-        com.example.demo.entity.Role userRole = roleRepository.findByName("USER")
-                .orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Default role USER not found in database"));
-        user.setRoles(Set.of(userRole));
-
-        // 5. Lưu user vào database
-        User savedUser = userRepository.save(user);
-
-        // 6. Tự động tạo giỏ hàng (Cart) mới
-        Cart newCart = new Cart();
-        newCart.setUser(savedUser);
-        cartRepository.save(newCart);
-        log.info("Cart created for user {}", savedUser.getUsername());
-
-        // 7. THAY ĐỔI: Gửi email chứa mã OTP
-        emailService.sendVerificationOtp(savedUser.getEmail(), otp);
-        log.info("User {} created and verification OTP sent.", savedUser.getUsername());
-
-        return userMapper.toUserResponse(savedUser);
+    private String generateOtp() {
+        SecureRandom random = new SecureRandom();
+        return String.format("%06d", random.nextInt(1_000_000));
     }
 
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
@@ -131,31 +256,21 @@ public class AuthenticationService {
                 .build();
     }
 
-    // =================================================================
-    // CHỨC NĂNG MỚI: GỬI LẠI MÃ OTP
-    // =================================================================
     @Transactional
     public void resendOtp(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        // Để chống spam, chỉ cho phép gửi lại OTP sau 60 giây
         if (user.getOtpGeneratedTime() != null &&
                 Duration.between(user.getOtpGeneratedTime(), LocalDateTime.now()).toSeconds() < 60) {
             throw new AppException(ErrorCode.OTP_COOLDOWN);
         }
 
-        // Tạo mã OTP mới
-        SecureRandom random = new SecureRandom();
-        String newOtp = String.format("%06d", random.nextInt(1_000_000));
-
+        String newOtp = generateOtp();
         user.setOtp(newOtp);
         user.setOtpGeneratedTime(LocalDateTime.now());
         userRepository.save(user);
 
-        // Logic thông minh:
-        // - Nếu tài khoản chưa xác thực -> gửi email xác thực.
-        // - Nếu tài khoản đã xác thực (trường hợp quên mật khẩu) -> gửi email đặt lại mật khẩu.
         if (!user.isEmailVerified()) {
             emailService.sendVerificationOtp(email, newOtp);
             log.info("Resent verification OTP to {}", email);
@@ -164,8 +279,6 @@ public class AuthenticationService {
             log.info("Resent password reset OTP to {}", email);
         }
     }
-
-
 
     public void verifyOtp(OtpVerificationRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
@@ -185,15 +298,11 @@ public class AuthenticationService {
         userRepository.save(user);
     }
 
-    // --- LOGIC MỚI CHO VIỆC QUÊN MẬT KHẨU ---
-
     public void forgotPassword(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        Random random = new Random();
-        String otp = String.format("%06d", random.nextInt(999999));
-
+        String otp = generateOtp();
         user.setOtp(otp);
         user.setOtpGeneratedTime(LocalDateTime.now());
         userRepository.save(user);
@@ -201,7 +310,6 @@ public class AuthenticationService {
         emailService.sendPasswordResetOtp(email, otp);
         log.info("Password reset OTP sent to {}", email);
     }
-
 
     public void resetPassword(ResetPasswordRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
@@ -221,10 +329,8 @@ public class AuthenticationService {
         log.info("Password for user {} has been reset.", user.getUsername());
     }
 
-    // --- CÁC PHƯƠNG THỨC HỖ TRỢ TOKEN ĐƯỢC THÊM LẠI ---
-
     public void logout(LogoutRequest request) throws ParseException, JOSEException {
-        var signedToken = verifyToken(request.getToken(), true); // isLogout = true, cần token hợp lệ để logout
+        var signedToken = verifyToken(request.getToken(), true);
         String jit = signedToken.getJWTClaimsSet().getJWTID();
         Date expiryTime = signedToken.getJWTClaimsSet().getExpirationTime();
         InvalidatedToken invalidatedToken =
@@ -243,7 +349,6 @@ public class AuthenticationService {
             throw new AppException(ErrorCode.UNAUTHENTICATED);
         }
 
-        // Khi logout, không cần check token đã bị logout chưa
         if (isLogout) return signedJWT;
 
         if (invalidatedTokenRepository.existsById(signedJWT.getJWTClaimsSet().getJWTID())) {
@@ -260,7 +365,7 @@ public class AuthenticationService {
                 .issuer("coursejava.com")
                 .issueTime(new Date())
                 .expirationTime(new Date(Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()))
-                .jwtID(UUID.randomUUID().toString()) // Quan trọng cho việc logout
+                .jwtID(UUID.randomUUID().toString())
                 .claim("scope", buildScope(user))
                 .build();
         Payload payload = new Payload(jwtClaimsSet.toJSONObject());

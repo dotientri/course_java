@@ -49,7 +49,7 @@ public class Order {
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference("order-items")
-    List<OrderItem> items;
+    private List<OrderItem> orderItems;
 
     // Các trường thời gian để theo dõi
     @Column(nullable = false, updatable = false) // Không cho phép cập nhật createdAt

@@ -1,3 +1,4 @@
+// TẠO FILE MỚI hoặc SỬA LẠI: src/main/java/com/example/demo/service/CartService.java
 package com.example.demo.service;
 
 import com.example.demo.dto.response.CartResponse;
@@ -11,7 +12,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.math.BigDecimal;
 import java.util.Optional;
 
 @Service
@@ -19,9 +20,111 @@ import java.util.Optional;
 public class CartService {
 
     private final CartRepository cartRepository;
-    private final ProductRepository productRepository;
+    private final ProductVariantRepository variantRepository;
+    private final CartItemRepository cartItemRepository;
     private final UserRepository userRepository;
-    private final CartMapper cartMapper; // **QUAN TRỌNG**
+    private final CartMapper cartMapper;
+
+    @Transactional
+    public CartResponse addItem(Long variantId, int quantity) {
+        Cart cart = getOrCreateCartForCurrentUser();
+        ProductVariant variant = findVariantById(variantId);
+
+        if (variant.getStock() < quantity) {
+            throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
+        }
+
+        Optional<CartItem> existingItemOpt = cart.getCartItems().stream()
+                .filter(item -> item.getVariant().getVariantId().equals(variantId))
+                .findFirst();
+
+        if (existingItemOpt.isPresent()) {
+            CartItem existingItem = existingItemOpt.get();
+            int newQuantity = existingItem.getQuantity() + quantity;
+            if (variant.getStock() < newQuantity) {
+                throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
+            }
+            existingItem.setQuantity(newQuantity);
+            cartItemRepository.save(existingItem);
+        } else {
+            CartItem newItem = new CartItem();
+            newItem.setCart(cart);
+            newItem.setVariant(variant);
+            newItem.setQuantity(quantity);
+            cart.getCartItems().add(cartItemRepository.save(newItem));
+        }
+
+        updateCartTotal(cart);
+        return cartMapper.toCartResponse(cartRepository.save(cart));
+    }
+
+    @Transactional
+    public CartResponse updateItem(Long variantId, int quantity) {
+        Cart cart = getOrCreateCartForCurrentUser();
+        CartItem itemToUpdate = findCartItemByVariantId(cart, variantId);
+
+        if (quantity == 0) {
+            return removeItem(variantId);
+        }
+
+        ProductVariant variant = itemToUpdate.getVariant();
+        if (variant.getStock() < quantity) {
+            throw new AppException(ErrorCode.INSUFFICIENT_STOCK);
+        }
+
+        itemToUpdate.setQuantity(quantity);
+        cartItemRepository.save(itemToUpdate);
+        updateCartTotal(cart);
+        return cartMapper.toCartResponse(cartRepository.save(cart));
+    }
+
+    @Transactional
+    public CartResponse removeItem(Long variantId) {
+        Cart cart = getOrCreateCartForCurrentUser();
+        CartItem itemToRemove = findCartItemByVariantId(cart, variantId);
+
+        cart.getCartItems().remove(itemToRemove);
+        cartItemRepository.delete(itemToRemove);
+
+        updateCartTotal(cart);
+        return cartMapper.toCartResponse(cartRepository.save(cart));
+    }
+
+    @Transactional
+    public void clearCart() {
+        Cart cart = getOrCreateCartForCurrentUser();
+        cartItemRepository.deleteAll(cart.getCartItems());
+        cart.getCartItems().clear();
+        updateCartTotal(cart);
+        cartRepository.save(cart);
+    }
+
+    public CartResponse getCartForCurrentUser() {
+        return cartMapper.toCartResponse(getOrCreateCartForCurrentUser());
+    }
+
+    // --- Helper Methods ---
+
+    private Cart getOrCreateCartForCurrentUser() {
+        User currentUser = getCurrentUser();
+        return cartRepository.findByUser(currentUser)
+                .orElseGet(() -> {
+                    Cart newCart = new Cart();
+                    newCart.setUser(currentUser);
+                    return cartRepository.save(newCart);
+                });
+    }
+
+    private void updateCartTotal(Cart cart) {
+        BigDecimal total = cart.getCartItems().stream()
+                .map(item -> {
+                    BigDecimal price = Optional.ofNullable(item.getVariant().getSalePrice())
+                            .orElse(item.getVariant().getPrice());
+                    return price.multiply(new BigDecimal(item.getQuantity()));
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        cart.setTotalPrice(total);
+    }
 
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -29,93 +132,15 @@ public class CartService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
     }
 
-    @Transactional(readOnly = true)
-    public CartResponse getCart() {
-        User currentUser = getCurrentUser();
-        Cart cart = cartRepository.findByUser(currentUser)
-                .orElseGet(() -> createNewCartForUser(currentUser));
-        return cartMapper.toCartResponse(cart);
+    private ProductVariant findVariantById(Long variantId) {
+        return variantRepository.findById(variantId)
+                .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_EXISTED));
     }
 
-    @Transactional
-    public CartResponse addItem(Long productId, int quantity) {
-        if (quantity <= 0) {
-            throw new AppException(ErrorCode.INVALID_QUANTITY);
-        }
-        User currentUser = getCurrentUser();
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_EXISTED));
-        Cart cart = cartRepository.findByUser(currentUser)
-                .orElseGet(() -> createNewCartForUser(currentUser));
-
-        Optional<CartItem> existingItemOpt = cart.getCartItems().stream()
-                .filter(item -> item.getProduct().getProductId().equals(productId))
-                .findFirst();
-
-        if (existingItemOpt.isPresent()) {
-            CartItem item = existingItemOpt.get();
-            item.setQuantity(item.getQuantity() + quantity);
-        } else {
-            CartItem newItem = CartItem.builder()
-                    .cart(cart)
-                    .product(product)
-                    .quantity(quantity)
-                    .build();
-            cart.getCartItems().add(newItem);
-        }
-        Cart savedCart = cartRepository.save(cart);
-        return cartMapper.toCartResponse(savedCart);
-    }
-
-    @Transactional
-    public CartResponse updateItem(Long productId, int quantity) {
-        if (quantity < 0) {
-            throw new AppException(ErrorCode.INVALID_QUANTITY);
-        }
-        Cart cart = getCartEntityForCurrentUser();
-
-        CartItem itemToUpdate = cart.getCartItems().stream()
-                .filter(item -> item.getProduct().getProductId().equals(productId))
+    private CartItem findCartItemByVariantId(Cart cart, Long variantId) {
+        return cart.getCartItems().stream()
+                .filter(item -> item.getVariant().getVariantId().equals(variantId))
                 .findFirst()
                 .orElseThrow(() -> new AppException(ErrorCode.ITEM_NOT_IN_CART));
-
-        if (quantity == 0) {
-            // Nếu số lượng là 0, xóa sản phẩm khỏi giỏ hàng
-            cart.getCartItems().remove(itemToUpdate);
-        } else {
-            itemToUpdate.setQuantity(quantity);
-        }
-
-        Cart savedCart = cartRepository.save(cart);
-        return cartMapper.toCartResponse(savedCart);
-    }
-
-    @Transactional
-    public CartResponse removeItem(Long productId) {
-        // Xóa sản phẩm thực chất là cập nhật số lượng về 0
-        return updateItem(productId, 0);
-    }
-
-    @Transactional
-    public void clearCart() {
-        Cart cart = getCartEntityForCurrentUser();
-        cart.getCartItems().clear(); // orphanRemoval=true sẽ tự động xóa các CartItem trong DB
-        cartRepository.save(cart);
-    }
-
-    // Helper method để lấy Cart entity, ném lỗi nếu không có
-    private Cart getCartEntityForCurrentUser() {
-        User currentUser = getCurrentUser();
-        return cartRepository.findByUser(currentUser)
-                .orElseThrow(() -> new AppException(ErrorCode.CART_NOT_FOUND));
-    }
-
-    // Helper method để tạo giỏ hàng mới
-    private Cart createNewCartForUser(User user) {
-        Cart newCart = Cart.builder()
-                .user(user)
-                .cartItems(new ArrayList<>())
-                .build();
-        return cartRepository.save(newCart);
     }
 }

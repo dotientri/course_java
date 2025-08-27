@@ -2,41 +2,36 @@ package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.FieldDefaults;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "cart")
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class Cart {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    Long id;
 
-    @OneToOne
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    User user;
 
-    // THIS IS THE MISSING PIECE:
-    // This field, combined with the @Data annotation from Lombok,
-    // automatically creates the getCartItems() method.
+    // EAGER fetch is often useful for carts, as you usually need the items when you load the cart.
+    // @Builder.Default ensures the list is initialized.
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
-    private List<CartItem> cartItems;
+    @Builder.Default
+    List<CartItem> cartItems = new ArrayList<>();
 
-    // HELPER METHOD: This is a clean way to calculate the total price.
-    // Your OrderService is calling cart.getTotalPrice(), so this method is also required.
-    public BigDecimal getTotalPrice() {
-        if (cartItems == null || cartItems.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        return cartItems.stream()
-                // Calculate price for each item (product price * quantity)
-                .map(item -> item.getProduct().getPrice().multiply(new BigDecimal(item.getQuantity())))
-                // Sum up all the item prices
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
+    // **THÊM TRƯỜNG NÀY ĐỂ SỬA LỖI**
+    // Lưu tổng giá trị của giỏ hàng, được tính toán bởi CartService.
+    @Column(precision = 10, scale = 2)
+    BigDecimal totalPrice;
 }
